@@ -5,27 +5,30 @@ import datetime
 
 import pandas as pd
 import numpy as np
-from evdev import uinput, ecodes as e
 from math import sqrt
 import math
 
-__author__ = 'arcady'
-
 from collections import deque
 from subprocess import Popen, PIPE
+
+from flappybird import flappybird_client
+from matplotlib import pyplot as pl
+
+import theano.tensor as T
+import theano
+
+from utils.utils import set_keras_backend
+set_keras_backend("theano")
 
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.advanced_activations import PReLU
 from keras.optimizers import SGD
-import keras.regularizers
+from keras.optimizers import Adadelta
 
-import flappybird_client
-
+fig = pl.figure()
 client = flappybird_client.game_client()
 
-import theano.tensor as T
-import theano
 
 class sequence:
     def __init__(self,frames_):
@@ -47,10 +50,9 @@ class state:
         self.r = r
         self.seq_next = seq2
 
-from matplotlib import pyplot as pl
-fig = pl.figure()
 
 class qlearn:
+
     def __init__(self):
         self.num_frames = 2
         self.batch_size = 30
@@ -70,10 +72,9 @@ class qlearn:
         self.iters = []
         pl.ion()
 
+        random.seed(7)
 
-        random.seed(datetime.datetime.now())
-
-    def my_loss(self,y_true, y_pred):
+    def custom_loss(self,y_true, y_pred):
         loss_ = T.sqr(y_pred - y_true)
 
         idxs = (y_true < self.marker + 1).nonzero()
@@ -88,17 +89,16 @@ class qlearn:
 
     def build_net(self):
         model_ = Sequential()
-        regularizer = keras.regularizers.l1l2(0.0,0.01)
 
         input_neurons = self.num_frames*5
-        optimizer_best = keras.optimizers.Adadelta(lr=1.5, rho=0.95, epsilon=1e-6)
-        optimizer_deepmind = keras.optimizers.RMSprop(lr=0.001, rho=0.95, epsilon=1e-6)
+        optimizer_best = Adadelta(lr=1.5, rho=0.95, epsilon=1e-6)
+        #optimizer_deepmind = keras.optimizers.RMSprop(lr=0.001, rho=0.95, epsilon=1e-6)
 
-        model_.add(Dense(input_neurons*3, input_dim = input_neurons, init='glorot_uniform',activation='relu'))
+        model_.add(Dense(input_neurons*3, input_dim = input_neurons, init = 'glorot_uniform', activation = 'relu'))
         #model_.add(Dropout(0.1))
-        model_.add(Dense(input_neurons*3, init='glorot_uniform',activation='relu'))
-        model_.add(Dense(2, init='glorot_uniform',activation='linear'))
-        model_.compile(loss=self.my_loss, optimizer=optimizer_best)
+        model_.add(Dense(input_neurons*3, init = 'glorot_uniform', activation = 'relu'))
+        model_.add(Dense(2, init = 'glorot_uniform', activation = 'linear'))
+        model_.compile(loss = self.custom_loss, optimizer = optimizer_best)
         return model_
 
     def train_net(self,model_,train_examples,y):
@@ -113,30 +113,30 @@ class qlearn:
         matrix = np.array(matrix)
         X = matrix.reshape(len(train_examples),len(arr))
 
-        model_.fit(X,y,nb_epoch=1,batch_size=len(train_examples),verbose=False)
+        model_.fit(X, y, epochs = 1, batch_size = len(train_examples), verbose = False)
 
-    def evaluate_net(self,model_,train_examples,y):
-        matrix=[]
+    def evaluate_net(self, model_, train_examples, y):
+        matrix = []
         for object in train_examples:
-            arr=[]
+            arr = []
             for frame in object:
                 arr += frame.array
             numarr = np.array(arr)
             matrix.append(numarr)
 
         matrix = np.array(matrix)
-        X = matrix.reshape(len(train_examples),len(arr))
+        X = matrix.reshape(len(train_examples), len(arr))
 
-        return model_.evaluate(X,y,verbose=False)
+        return model_.evaluate(X, y, verbose = False)
 
-    def score_net(self,model_,seq):
+    def score_net(self, model_,seq):
         arr=[]
         for frame in seq:
             arr += frame.array
         numarr = np.array(arr)
-        X = numarr.reshape(1,len(arr))
+        X = numarr.reshape(1, len(arr))
 
-        pred = model_.predict(X,batch_size=1,verbose=False)
+        pred = model_.predict(X, batch_size = 1, verbose = False)
 
         return pred
 
@@ -190,7 +190,7 @@ class qlearn:
 
                 if len(seq.frames) > self.num_frames:
                     #store state
-                    state_ = state(seq.frames[-(self.num_frames+1):-1],current_action,reward,seq.frames[-self.num_frames:])
+                    state_ = state(seq.frames[-(self.num_frames+1):-1], current_action, reward, seq.frames[-self.num_frames:])
                     states.append(state_)
 
                     #print len(states)
@@ -201,7 +201,7 @@ class qlearn:
                         action_num = random.randint(0,1)
 
                     else:
-                        predictions = self.score_net(model_=self.model, seq=seq.frames[-self.num_frames:])
+                        predictions = self.score_net(model_ = self.model, seq = seq.frames[-self.num_frames:])
                         client.change_screen_values(predictions)
                         max_ind = np.argmax(predictions)
                         action_num = max_ind
@@ -221,7 +221,7 @@ class qlearn:
                                 trains.append(state_.seq_cur)
                                 self.actions.append(state_.a)
 
-                                predictions_target = self.score_net(model_=self.target_model, seq=state_.seq_next)
+                                predictions_target = self.score_net(model_ = self.target_model, seq = state_.seq_next)
                                 #predictions_train = self.score_net(seq=state_.seq_cur)
 
                                 max_prediction = np.max(predictions_target)
@@ -239,10 +239,9 @@ class qlearn:
                             targets = targets.reshape(len(sample),2)
 
                             #train model
-                            #self.actions = np.array(self.actions)
-                            self.train_net(model_=self.model, train_examples=trains,y=targets)
+                            self.train_net(model_ = self.model, train_examples = trains, y = targets)
 
-                            err=self.evaluate_net(model_=self.model, train_examples=trains,y=targets)
+                            err = self.evaluate_net(model_ = self.model, train_examples = trains, y = targets)
                             self.errors.append(err)
 
                 current_action = action_num

@@ -1,8 +1,6 @@
 import numpy
 from math import exp
 
-__author__ = 'arcady'
-
 import flappybird_original as flappybird
 
 class frame:
@@ -13,9 +11,7 @@ class frame:
         self.pipe1_y1 = float(y11_ + 40)/flappybird.WIN_HEIGHT
         self.pipe2_y1 = float(y21_ + 40)/flappybird.WIN_HEIGHT
 
-        #self.array = [self.bird_speed,self.pipe1_x,self.pipe1_y1,self.pipe2_y1]
         self.array = [self.bird_speed,self.bird_y,self.pipe1_x,self.pipe1_y1,self.pipe2_y1]
-        #self.array = [self.bird_speed,self.bird_y]
 
 class game_client:
     def __init__(self):
@@ -40,8 +36,6 @@ class game_client:
         for collision,gamescore,score_updated,bird_y,bird_x,bird_velocity,pipes in self.game.run():
             bird_y = flappybird.WIN_HEIGHT - bird_y
             bird_y = max(bird_y,0)
-            '''if losts == self.round_length:
-                break'''
 
             iter += 1
             if iter % 2 != 0:
@@ -60,17 +54,6 @@ class game_client:
 
             middle = pipes[0].bottom_height_px + 40
             delta = abs(bird_y - middle)
-            #delta /= flappybird.WIN_HEIGHT
-
-            '''reward = 1 / (1 + exp(delta/100))
-
-            if collision:
-                reward = -1
-            if delta < 40:
-                reward = 1
-            if bird_y < 30 or bird_y > 500:
-                reward = -1'''
-            #reward = numpy.clip(reward,-1,1)
 
             reward = 0
             if bird_y < 30 or bird_y > 500:
@@ -102,16 +85,7 @@ class game_client:
                 reward = -1
 
 
-            #reward = numpy.clip(reward,-1,1)
-
-            #print collision
-            # if current_pipe != pipe1:
-            #     reward = 0
-
             current_pipe = pipe1
             previous_delta = delta
-
-
-
 
             yield reward, frame_
